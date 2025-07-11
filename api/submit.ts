@@ -1,30 +1,28 @@
-// api/submit.ts
+// api/submit.ts  (Vercel / Next.js API Route)
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// 1) URL вашого Google Apps Script Web-App приходить із змінної середовища
-const GOOGLE_SCRIPT_URL = process.env.GOOGLE_SHEETS_WEBAPP_URL!;
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // ────────────────────────────────────────────────────────────────────────────
-  // A.  CORS  ➜  дозволяємо будь-який origin (або заміни на свій домен)
-  // ────────────────────────────────────────────────────────────────────────────
+  // ──────────────────────────────  CORS  ──────────────────────────────
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // B.  Обробка pre-flight (OPTIONS)  →  просто повертаємо 204 No Content
   if (req.method === 'OPTIONS') {
+    // pre-flight
     return res.status(204).end();
   }
 
-  // C.  Дозволяємо тільки POST
+  // ──────────────────────────────  Only POST  ─────────────────────────
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, message: 'Method Not Allowed' });
+    return res.status(405).send('Method Not Allowed');
   }
 
-  // ────────────────────────────────────────────────────────────────────────────
-  // D.  Проксі-запит на Google Apps Script
-  // ────────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────  Forward to Apps Script  ───────────────
+  const GOOGLE_SCRIPT_URL = process.env.GOOGLE_SHEETS_WEBAPP_URL;
+  if (!GOOGLE_SCRIPT_URL) {
+    return res.status(500).json({ ok: false, error: 'Missing GOOGLE_SHEETS_WEBAPP_URL env' });
+  }
+
   try {
     const forward = await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
@@ -32,17 +30,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify(req.body),
     });
 
-    // якщо Apps Script повернув помилку — кидаємо її далі
+    const text = await forward.text();           // Apps Script часто повертає plain-text «OK»
+
     if (!forward.ok) {
-      const text = await forward.text();
+      console.error('Google Script error:', text);
       return res.status(500).json({ ok: false, gsError: text });
     }
 
-    // Apps Script зазвичай повертає plain-text «OK» або JSON
-    const resultText = await forward.text();
-    return res.status(200).json({ ok: true, gs: resultText });
+    return res.status(200).json({ ok: true, gs: text });
   } catch (err: any) {
     console.error('Proxy error:', err);
-    return res.status(500).json({ ok: false, message: 'Proxy failed', error: err.message });
+    return res.status(500).json({ ok: false, error: err.message });
   }
 }
