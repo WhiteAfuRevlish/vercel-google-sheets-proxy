@@ -1,30 +1,34 @@
-// Файл: /api/submit.ts
+// /api/submit.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const GOOGLE_SCRIPT_URL = process.env.GOOGLE_SHEETS_WEBAPP_URL!;
+/** .env.local містить GOOGLE_SHEETS_WEBAPP_URL */
+const { GOOGLE_SHEETS_WEBAPP_URL } = process.env;
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse,
+) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ ok: false, error: 'Method Not Allowed' });
+    return;
   }
 
   try {
-    const response = await fetch(GOOGLE_SCRIPT_URL, {
+    const fetchRes = await fetch(GOOGLE_SHEETS_WEBAPP_URL as string, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req.body),
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(500).json({ error: 'Failed to submit to Google Sheets', data });
+    if (!fetchRes.ok) {
+      const text = await fetchRes.text();
+      res.status(fetchRes.status).json({ ok: false, error: text });
+      return;
     }
 
-    return res.status(200).json({ success: true, data });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message || 'Unknown error' });
+    const json = await fetchRes.json();
+    res.status(200).json(json);
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 }
