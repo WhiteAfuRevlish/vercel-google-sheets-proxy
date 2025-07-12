@@ -1,20 +1,21 @@
-// /api/submit.ts
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // 1. Дозволяємо CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-/** .env.local містить GOOGLE_SHEETS_WEBAPP_URL */
-const { GOOGLE_SHEETS_WEBAPP_URL } = process.env;
+  // 2. Обробка попереднього (preflight) запиту
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end(); // відповісти одразу
+  }
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
-) {
+  // 3. Обробка POST-запиту
   if (req.method !== 'POST') {
-    res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-    return;
+    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
   try {
-    const fetchRes = await fetch(GOOGLE_SHEETS_WEBAPP_URL as string, {
+    const fetchRes = await fetch(process.env.GOOGLE_SHEETS_WEBAPP_URL as string, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req.body),
@@ -22,13 +23,12 @@ export default async function handler(
 
     if (!fetchRes.ok) {
       const text = await fetchRes.text();
-      res.status(fetchRes.status).json({ ok: false, error: text });
-      return;
+      return res.status(fetchRes.status).json({ ok: false, error: text });
     }
 
     const json = await fetchRes.json();
-    res.status(200).json(json);
+    return res.status(200).json(json);
   } catch (err: any) {
-    res.status(500).json({ ok: false, error: err.message });
+    return res.status(500).json({ ok: false, error: err.message });
   }
 }
